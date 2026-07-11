@@ -115,9 +115,9 @@ ghcr.io/andreybotkin/n8n-with-max:<n8n-version>-<commit-sha>
 
 1. Создайте бота через @PrimeBot в Max мессенджере
 2. Получите токен доступа
-3. Добавьте токен в настройки ноды в n8n
+3. Создайте credentials `Max API` и укажите токен доступа и `Webhook Secret`
 
-API endpoint зафиксирован на `https://platform-api2.max.ru` и не может быть заменён через credentials.
+`Webhook Secret` задаётся один раз в credentials и автоматически используется нодой `Max Trigger`. API endpoint зафиксирован на `https://platform-api2.max.ru` и не может быть заменён через credentials.
 
 ## Быстрый старт
 
@@ -147,8 +147,8 @@ API endpoint зафиксирован на `https://platform-api2.max.ru` и н�
 
 ### Получение сообщений
 
-1. Добавьте ноду Max Trigger
-2. Настройте webhook и обязательно задайте `Webhook Secret` длиной 5-256 символов
+1. Создайте или обновите credentials `Max API`, указав токен и `Webhook Secret`
+2. Добавьте ноду `Max Trigger`
 3. Выберите типы событий для отслеживания
 
 ## Ресурсы
