@@ -1,6 +1,7 @@
 import { createHash, timingSafeEqual } from 'crypto';
 import type {
 	ICredentialDataDecryptedObject,
+	IDataObject,
 	IHookFunctions,
 	IHttpRequestOptions,
 	INodeTypeDescription,
@@ -56,6 +57,19 @@ export function requireMaxWebhookSecret(value: unknown): string {
 		);
 	}
 	return secret;
+}
+
+export function resolveMaxWebhookSecret(
+	credentials: ICredentialDataDecryptedObject,
+	additionalFields: IDataObject = {},
+): string {
+	const credentialSecret = credentials['webhookSecret'];
+	if (typeof credentialSecret === 'string' && credentialSecret.trim().length > 0) {
+		return requireMaxWebhookSecret(credentialSecret);
+	}
+
+	// Compatibility with workflows created before the secret moved into credentials.
+	return requireMaxWebhookSecret(additionalFields['secret']);
 }
 
 export function buildMaxWebhookFingerprint(input: IMaxWebhookFingerprintInput): string {
