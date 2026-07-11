@@ -1,11 +1,25 @@
 name: Build n8n image with MAX node
 
 on:
+  push:
+    branches:
+      - master
+    paths:
+      - .github/workflows/build-n8n-image.yml
+      - .dockerignore
+      - Dockerfile.n8n
+      - package.json
+      - package-lock.json
+      - credentials/**
+      - nodes/**
+      - gulpfile.js
+      - tsconfig.json
   workflow_dispatch:
     inputs:
       n8n_version:
-        description: Exact n8n image tag to use as the base image
-        required: true
+        description: Exact n8n image tag. Leave empty to use the current official latest image.
+        required: false
+        default: ''
         type: string
 
 permissions:
@@ -24,6 +38,51 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Resolve n8n version
+        id: n8n
+        shell: bash
+        env:
+          REQUESTED_VERSION: ${{ github.event.inputs.n8n_version }}
+        run: |
+          set -euo pipefail
+
+          version="${REQUESTED_VERSION:-}"
+          if [ -z "$version" ]; then
+            docker pull n8nio/n8n:latest >/dev/null
+            version="$(docker run --rm --entrypoint n8n n8nio/n8n:latest --version | tr -d '\r' | tail -n 1)"
+          fi
+
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Unable to resolve a valid n8n version: $version" >&2
+            exit 1
+          fi
+
+          docker buildx imagetools inspect "n8nio/n8n:$version" >/dev/null
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Using n8n version $version"
+
+      - name: Generate image tags
+        id: tags
+        shell: bash
+        env:
+          N8N_VERSION: ${{ steps.n8n.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          tags="ghcr.io/andreybotkin/n8n-with-max:${N8N_VERSION}-${GITHUB_SHA}
+          ghcr.io/andreybotkin/n8n-with-max:${N8N_VERSION}-latest"
+
+          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            tags="$tags
+          ghcr.io/andreybotkin/n8n-with-max:latest"
+          fi
+
+          {
+            echo 'value<<EOF'
+            echo "$tags"
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
@@ -39,7 +98,5 @@ jobs:
           push: true
           platforms: linux/amd64
           build-args: |
-            N8N_VERSION=${{ inputs.n8n_version }}
-          tags: |
-            ghcr.io/andreybotkin/n8n-with-max:${{ inputs.n8n_version }}-${{ github.sha }}
-            ghcr.io/andreybotkin/n8n-with-max:${{ inputs.n8n_version }}-latest
+            N8N_VERSION=${{ steps.n8n.outputs.version }}
+          tags: ${{ steps.tags.outputs.value }}
