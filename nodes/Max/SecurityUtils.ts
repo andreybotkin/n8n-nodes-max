@@ -138,13 +138,13 @@ export function cloneDescriptionWithoutUrlAttachments(
 		if (!value || typeof value !== 'object') return;
 
 		const object = value as Record<string, unknown>;
-		if (object.name === 'inputType' && Array.isArray(object.options)) {
-			object.options = object.options.filter(
+		if (object['name'] === 'inputType' && Array.isArray(object['options'])) {
+			object['options'] = object['options'].filter(
 				(option) =>
 					!(
 						option &&
 						typeof option === 'object' &&
-						(option as Record<string, unknown>).value === 'url'
+						(option as Record<string, unknown>)['value'] === 'url'
 					),
 			);
 		}
