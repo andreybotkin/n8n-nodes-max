@@ -7,8 +7,9 @@ import type {
 	IWebhookResponseData,
 } from 'n8n-workflow';
 import { MaxTrigger as OriginalMaxTrigger } from './MaxTrigger.node';
-import type { MaxWebhookEvent } from './MaxTriggerConfig';
+import type { MaxTriggerEvent, MaxWebhookEvent } from './MaxTriggerConfig';
 import {
+	buildMaxWebhookFingerprint,
 	createSecuredMaxContext,
 	parseAllowedIds,
 	requireMaxWebhookSecret,
@@ -16,6 +17,7 @@ import {
 } from './SecurityUtils';
 
 const originalTrigger = new OriginalMaxTrigger();
+const SUBSCRIPTION_FINGERPRINT_KEY = 'maxWebhookSubscriptionFingerprint';
 
 function passesFailClosedFilters(body: MaxWebhookEvent, additionalFields: IDataObject): boolean {
 	const allowedChatIds = parseAllowedIds(additionalFields['chatIds']);
@@ -37,6 +39,24 @@ function passesFailClosedFilters(body: MaxWebhookEvent, additionalFields: IDataO
 	return true;
 }
 
+function getCurrentSubscriptionFingerprint(context: IHookFunctions): string {
+	const additionalFields = context.getNodeParameter('additionalFields', {}) as IDataObject;
+	const secret = requireMaxWebhookSecret(additionalFields['secret']);
+	const events = context.getNodeParameter('events') as MaxTriggerEvent[];
+	const webhookUrl = context.getNodeWebhookUrl('default');
+	if (!webhookUrl) {
+		throw new Error('MAX webhook URL is not available');
+	}
+
+	return buildMaxWebhookFingerprint({
+		webhookUrl,
+		events,
+		secret,
+		version:
+			typeof additionalFields['version'] === 'string' ? additionalFields['version'] : undefined,
+	});
+}
+
 export class SecureMaxTrigger implements INodeType {
 	description: INodeTypeDescription = JSON.parse(
 		JSON.stringify(originalTrigger.description),
@@ -45,21 +65,41 @@ export class SecureMaxTrigger implements INodeType {
 	webhookMethods = {
 		default: {
 			async checkExists(this: IHookFunctions): Promise<boolean> {
+				const fingerprint = getCurrentSubscriptionFingerprint(this);
+				const staticData = this.getWorkflowStaticData('node') as IDataObject;
+				if (staticData[SUBSCRIPTION_FINGERPRINT_KEY] !== fingerprint) {
+					return false;
+				}
+
 				return await originalTrigger.webhookMethods.default.checkExists.call(
 					createSecuredMaxContext(this),
 				);
 			},
 			async create(this: IHookFunctions): Promise<boolean> {
-				const additionalFields = this.getNodeParameter('additionalFields', {}) as IDataObject;
-				requireMaxWebhookSecret(additionalFields['secret']);
-				return await originalTrigger.webhookMethods.default.create.call(
-					createSecuredMaxContext(this),
-				);
+				const fingerprint = getCurrentSubscriptionFingerprint(this);
+				const securedContext = createSecuredMaxContext(this);
+
+				const deleted = await originalTrigger.webhookMethods.default.delete.call(securedContext);
+				if (!deleted) {
+					throw new Error('Failed to replace the existing MAX webhook subscription');
+				}
+
+				const created = await originalTrigger.webhookMethods.default.create.call(securedContext);
+				if (created) {
+					const staticData = this.getWorkflowStaticData('node') as IDataObject;
+					staticData[SUBSCRIPTION_FINGERPRINT_KEY] = fingerprint;
+				}
+				return created;
 			},
 			async delete(this: IHookFunctions): Promise<boolean> {
-				return await originalTrigger.webhookMethods.default.delete.call(
+				const deleted = await originalTrigger.webhookMethods.default.delete.call(
 					createSecuredMaxContext(this),
 				);
+				if (deleted) {
+					const staticData = this.getWorkflowStaticData('node') as IDataObject;
+					delete staticData[SUBSCRIPTION_FINGERPRINT_KEY];
+				}
+				return deleted;
 			},
 		},
 	};
@@ -90,4 +130,4 @@ export class SecureMaxTrigger implements INodeType {
 	}
 }
 
-export { passesFailClosedFilters };
+export { getCurrentSubscriptionFingerprint, passesFailClosedFilters };
