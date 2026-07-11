@@ -9,6 +9,8 @@ import type {
 } from 'n8n-workflow';
 
 export const MAX_API_BASE_URL = 'https://platform-api2.max.ru';
+export const MIN_WEBHOOK_SECRET_LENGTH = 5;
+export const MAX_WEBHOOK_SECRET_LENGTH = 256;
 
 const MAX_API_HOSTS = new Set(['platform-api.max.ru', 'platform-api2.max.ru']);
 const TRUSTED_MAX_UPLOAD_HOSTS = new Set(['fu.oneme.ru', 'iu.oneme.ru', 'vu.okcdn.ru']);
@@ -36,6 +38,16 @@ export function validateMaxWebhookSecret(expectedSecret: string, actualHeader: u
 	}
 
 	return timingSafeEqual(expectedBuffer, actualBuffer);
+}
+
+export function requireMaxWebhookSecret(value: unknown): string {
+	const secret = typeof value === 'string' ? value.trim() : '';
+	if (secret.length < MIN_WEBHOOK_SECRET_LENGTH || secret.length > MAX_WEBHOOK_SECRET_LENGTH) {
+		throw new Error(
+			`Webhook Secret is required and must be ${MIN_WEBHOOK_SECRET_LENGTH}-${MAX_WEBHOOK_SECRET_LENGTH} characters long`,
+		);
+	}
+	return secret;
 }
 
 function hasAuthorizationHeader(headers: Record<string, unknown>): boolean {

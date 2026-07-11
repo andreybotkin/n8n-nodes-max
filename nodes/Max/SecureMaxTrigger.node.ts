@@ -11,6 +11,7 @@ import type { MaxWebhookEvent } from './MaxTriggerConfig';
 import {
 	createSecuredMaxContext,
 	parseAllowedIds,
+	requireMaxWebhookSecret,
 	validateMaxWebhookSecret,
 } from './SecurityUtils';
 
@@ -49,6 +50,8 @@ export class SecureMaxTrigger implements INodeType {
 				);
 			},
 			async create(this: IHookFunctions): Promise<boolean> {
+				const additionalFields = this.getNodeParameter('additionalFields', {}) as IDataObject;
+				requireMaxWebhookSecret(additionalFields['secret']);
 				return await originalTrigger.webhookMethods.default.create.call(
 					createSecuredMaxContext(this),
 				);
@@ -63,16 +66,19 @@ export class SecureMaxTrigger implements INodeType {
 
 	async webhook(this: IWebhookFunctions): Promise<IWebhookResponseData> {
 		const additionalFields = this.getNodeParameter('additionalFields', {}) as IDataObject;
-		const expectedSecret =
-			typeof additionalFields['secret'] === 'string' ? additionalFields['secret'].trim() : '';
+		let expectedSecret: string;
+		try {
+			expectedSecret = requireMaxWebhookSecret(additionalFields['secret']);
+		} catch {
+			this.getResponseObject().status(401).json({ error: 'Unauthorized' });
+			return { noWebhookResponse: true };
+		}
 
-		if (expectedSecret) {
-			const headers = this.getHeaderData();
-			const actualSecret = headers['x-max-bot-api-secret'] ?? headers['X-Max-Bot-Api-Secret'];
-			if (!validateMaxWebhookSecret(expectedSecret, actualSecret)) {
-				this.getResponseObject().status(401).json({ error: 'Unauthorized' });
-				return { noWebhookResponse: true };
-			}
+		const headers = this.getHeaderData();
+		const actualSecret = headers['x-max-bot-api-secret'] ?? headers['X-Max-Bot-Api-Secret'];
+		if (!validateMaxWebhookSecret(expectedSecret, actualSecret)) {
+			this.getResponseObject().status(401).json({ error: 'Unauthorized' });
+			return { noWebhookResponse: true };
 		}
 
 		const body = this.getBodyData() as unknown as MaxWebhookEvent;
