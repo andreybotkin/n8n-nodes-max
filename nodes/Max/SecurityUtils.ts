@@ -1,4 +1,4 @@
-import { timingSafeEqual } from 'crypto';
+import { createHash, timingSafeEqual } from 'crypto';
 import type {
 	ICredentialDataDecryptedObject,
 	IHookFunctions,
@@ -12,10 +12,18 @@ export const MAX_API_BASE_URL = 'https://platform-api2.max.ru';
 export const MIN_WEBHOOK_SECRET_LENGTH = 5;
 export const MAX_WEBHOOK_SECRET_LENGTH = 256;
 
+const WEBHOOK_SECRET_PATTERN = /^[A-Za-z0-9_-]{5,256}$/;
 const MAX_API_HOSTS = new Set(['platform-api.max.ru', 'platform-api2.max.ru']);
 const TRUSTED_MAX_UPLOAD_HOSTS = new Set(['fu.oneme.ru', 'iu.oneme.ru', 'vu.okcdn.ru']);
 
 type MaxContext = IExecuteFunctions | IHookFunctions | IWebhookFunctions;
+
+export interface IMaxWebhookFingerprintInput {
+	webhookUrl: string;
+	events: readonly string[];
+	secret: string;
+	version?: string | undefined;
+}
 
 function normalizeHeaderValue(value: unknown): string | undefined {
 	if (Array.isArray(value)) {
@@ -42,12 +50,23 @@ export function validateMaxWebhookSecret(expectedSecret: string, actualHeader: u
 
 export function requireMaxWebhookSecret(value: unknown): string {
 	const secret = typeof value === 'string' ? value.trim() : '';
-	if (secret.length < MIN_WEBHOOK_SECRET_LENGTH || secret.length > MAX_WEBHOOK_SECRET_LENGTH) {
+	if (!WEBHOOK_SECRET_PATTERN.test(secret)) {
 		throw new Error(
-			`Webhook Secret is required and must be ${MIN_WEBHOOK_SECRET_LENGTH}-${MAX_WEBHOOK_SECRET_LENGTH} characters long`,
+			`Webhook Secret is required, must be ${MIN_WEBHOOK_SECRET_LENGTH}-${MAX_WEBHOOK_SECRET_LENGTH} characters long, and may contain only letters, digits, underscore, and hyphen`,
 		);
 	}
 	return secret;
+}
+
+export function buildMaxWebhookFingerprint(input: IMaxWebhookFingerprintInput): string {
+	const normalized = JSON.stringify({
+		webhookUrl: input.webhookUrl.trim(),
+		events: [...new Set(input.events)].sort(),
+		secret: input.secret,
+		version: input.version?.trim() ?? '',
+	});
+
+	return createHash('sha256').update(normalized).digest('hex');
 }
 
 function hasAuthorizationHeader(headers: Record<string, unknown>): boolean {

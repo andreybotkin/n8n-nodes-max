@@ -8,6 +8,7 @@ import { SecureMax } from '../SecureMax.node';
 import { passesFailClosedFilters, SecureMaxTrigger } from '../SecureMaxTrigger.node';
 import type { MaxWebhookEvent } from '../MaxTriggerConfig';
 import {
+	buildMaxWebhookFingerprint,
 	hardenMaxHttpRequest,
 	MAX_API_BASE_URL,
 	requireMaxWebhookSecret,
@@ -53,11 +54,31 @@ describe('MAX security wrappers', () => {
 		expect(validateMaxWebhookSecret('expected', undefined)).toBe(false);
 	});
 
-	it('requires a webhook secret with the documented length', () => {
-		expect(requireMaxWebhookSecret(' 12345 ')).toBe('12345');
+	it('requires a webhook secret with the documented format', () => {
+		expect(requireMaxWebhookSecret(' bot_secret-123 ')).toBe('bot_secret-123');
 		expect(() => requireMaxWebhookSecret('')).toThrow('Webhook Secret is required');
 		expect(() => requireMaxWebhookSecret('1234')).toThrow('Webhook Secret is required');
 		expect(() => requireMaxWebhookSecret('x'.repeat(257))).toThrow('Webhook Secret is required');
+		expect(() => requireMaxWebhookSecret('invalid secret')).toThrow('may contain only');
+		expect(() => requireMaxWebhookSecret('invalid$secret')).toThrow('may contain only');
+	});
+
+	it('creates a stable fingerprint and changes it for webhook configuration changes', () => {
+		const base = {
+			webhookUrl: 'https://n8n.example.com/webhook/max',
+			events: ['message_created', 'bot_started'],
+			secret: 'secret_123',
+			version: '0.0.1',
+		};
+		const first = buildMaxWebhookFingerprint(base);
+		const reordered = buildMaxWebhookFingerprint({
+			...base,
+			events: ['bot_started', 'message_created'],
+		});
+		const rotatedSecret = buildMaxWebhookFingerprint({ ...base, secret: 'secret_456' });
+
+		expect(reordered).toBe(first);
+		expect(rotatedSecret).not.toBe(first);
 	});
 
 	it('rejects webhook activation without a valid secret', async () => {

@@ -32,6 +32,24 @@ npm install n8n-nodes-max
 export N8N_CUSTOM_EXTENSIONS=n8n-nodes-max
 ```
 
+### n8n с предустановленной Max node
+
+Для Docker и Kubernetes репозиторий также содержит сборку n8n, в которую эта нода уже установлена.
+
+После публикации образ доступен в GitHub Container Registry:
+
+```bash
+docker pull ghcr.io/andreybotkin/n8n-with-max:<n8n-version>-latest
+```
+
+Тег образа содержит версию базового n8n. Для воспроизводимого production-развёртывания рекомендуется использовать immutable-тег с commit SHA:
+
+```text
+ghcr.io/andreybotkin/n8n-with-max:<n8n-version>-<commit-sha>
+```
+
+Образ собирается из [`Dockerfile.n8n`](Dockerfile.n8n). Инструкция для Kubernetes и Helm находится в [`docs/k3s-deployment.md`](docs/k3s-deployment.md).
+
 **Полезные ссылки:**
 
 - [Официальная документация по установке community nodes](https://docs.n8n.io/integrations/community-nodes/installation/)
@@ -136,7 +154,7 @@ API endpoint зафиксирован на `https://platform-api2.max.ru` и н�
 ## Ресурсы
 
 - [Документация Max Bot API](https://dev.max.ru/docs-api)
-- [GitHub репозиторий](https://github.com/pfrankov/n8n-nodes-max)
+- [Оригинальный GitHub репозиторий](https://github.com/pfrankov/n8n-nodes-max)
 
 ## Лицензия
 
