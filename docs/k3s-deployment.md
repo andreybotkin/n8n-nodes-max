@@ -141,9 +141,9 @@ SecureMaxTrigger.node.js
 
 ## 7. Настроить Max Trigger
 
-1. Создайте Max credentials с access token бота.
-2. Добавьте `Max Trigger`.
-3. Задайте Webhook Secret длиной 5-256 символов. Разрешены латинские буквы, цифры, `_` и `-`.
+1. Создайте credentials `Max API`.
+2. Укажите access token бота и `Webhook Secret` длиной 5-256 символов. Разрешены латинские буквы, цифры, `_` и `-`.
+3. Добавьте `Max Trigger` и выберите созданные credentials.
 4. Активируйте workflow.
 
 Сгенерировать secret:
@@ -152,7 +152,7 @@ SecureMaxTrigger.node.js
 openssl rand -hex 32
 ```
 
-После изменения secret, списка events, API version или внешнего webhook URL деактивируйте и снова активируйте workflow. Нода заменит существующую подписку.
+Секрет сохраняется в credentials n8n и повторно вводить его в `Max Trigger` не требуется. После изменения secret, списка events, API version или внешнего webhook URL деактивируйте и снова активируйте workflow. Нода заменит существующую подписку.
 
 ## Queue mode
 
