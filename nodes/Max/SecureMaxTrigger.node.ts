@@ -20,6 +20,23 @@ import {
 const originalTrigger = new OriginalMaxTrigger();
 const SUBSCRIPTION_FINGERPRINT_KEY = 'maxWebhookSubscriptionFingerprint';
 
+function cloneTriggerDescriptionWithoutLegacySecret(): INodeTypeDescription {
+	const description = JSON.parse(
+		JSON.stringify(originalTrigger.description),
+	) as INodeTypeDescription;
+	const additionalFields = description.properties.find(
+		(property) => property.name === 'additionalFields',
+	);
+
+	if (additionalFields && 'options' in additionalFields && Array.isArray(additionalFields.options)) {
+		additionalFields.options = additionalFields.options.filter(
+			(property) => property.name !== 'secret',
+		);
+	}
+
+	return description;
+}
+
 function passesFailClosedFilters(body: MaxWebhookEvent, additionalFields: IDataObject): boolean {
 	const allowedChatIds = parseAllowedIds(additionalFields['chatIds']);
 	if (allowedChatIds.length > 0) {
@@ -60,9 +77,7 @@ async function getCurrentSubscriptionFingerprint(context: IHookFunctions): Promi
 }
 
 export class SecureMaxTrigger implements INodeType {
-	description: INodeTypeDescription = JSON.parse(
-		JSON.stringify(originalTrigger.description),
-	) as INodeTypeDescription;
+	description: INodeTypeDescription = cloneTriggerDescriptionWithoutLegacySecret();
 
 	webhookMethods = {
 		default: {
