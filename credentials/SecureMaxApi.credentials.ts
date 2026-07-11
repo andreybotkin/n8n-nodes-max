@@ -14,7 +14,18 @@ export class SecureMaxApi implements ICredentialType {
 			type: 'string',
 			typeOptions: { password: true },
 			default: '',
+			required: true,
 			description: 'The bot access token. Get it from MAX for Business.',
+		},
+		{
+			displayName: 'Webhook Secret',
+			name: 'webhookSecret',
+			type: 'string',
+			typeOptions: { password: true },
+			default: '',
+			required: true,
+			description:
+				'Secret used to verify X-Max-Bot-Api-Secret on incoming webhook events. Must be 5-256 characters and contain only letters, digits, underscore, and hyphen.',
 		},
 	];
 
