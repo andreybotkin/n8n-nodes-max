@@ -22,7 +22,7 @@ export interface IMaxWebhookFingerprintInput {
 	webhookUrl: string;
 	events: readonly string[];
 	secret: string;
-	version?: string;
+	version?: string | undefined;
 }
 
 function normalizeHeaderValue(value: unknown): string | undefined {
