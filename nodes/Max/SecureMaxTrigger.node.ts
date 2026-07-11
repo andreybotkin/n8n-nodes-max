@@ -13,12 +13,29 @@ import {
 	buildMaxWebhookFingerprint,
 	createSecuredMaxContext,
 	parseAllowedIds,
-	requireMaxWebhookSecret,
+	resolveMaxWebhookSecret,
 	validateMaxWebhookSecret,
 } from './SecurityUtils';
 
 const originalTrigger = new OriginalMaxTrigger();
 const SUBSCRIPTION_FINGERPRINT_KEY = 'maxWebhookSubscriptionFingerprint';
+
+function cloneTriggerDescriptionWithoutLegacySecret(): INodeTypeDescription {
+	const description = JSON.parse(
+		JSON.stringify(originalTrigger.description),
+	) as INodeTypeDescription;
+	const additionalFields = description.properties.find(
+		(property) => property.name === 'additionalFields',
+	);
+
+	if (additionalFields && 'options' in additionalFields && Array.isArray(additionalFields.options)) {
+		additionalFields.options = additionalFields.options.filter(
+			(property) => property.name !== 'secret',
+		);
+	}
+
+	return description;
+}
 
 function passesFailClosedFilters(body: MaxWebhookEvent, additionalFields: IDataObject): boolean {
 	const allowedChatIds = parseAllowedIds(additionalFields['chatIds']);
@@ -40,9 +57,10 @@ function passesFailClosedFilters(body: MaxWebhookEvent, additionalFields: IDataO
 	return true;
 }
 
-function getCurrentSubscriptionFingerprint(context: IHookFunctions): string {
+async function getCurrentSubscriptionFingerprint(context: IHookFunctions): Promise<string> {
 	const additionalFields = context.getNodeParameter('additionalFields', {}) as IDataObject;
-	const secret = requireMaxWebhookSecret(additionalFields['secret']);
+	const credentials = await context.getCredentials('maxApi');
+	const secret = resolveMaxWebhookSecret(credentials, additionalFields);
 	const events = context.getNodeParameter('events') as MaxTriggerEvent[];
 	const webhookUrl = context.getNodeWebhookUrl('default');
 	if (!webhookUrl) {
@@ -59,14 +77,12 @@ function getCurrentSubscriptionFingerprint(context: IHookFunctions): string {
 }
 
 export class SecureMaxTrigger implements INodeType {
-	description: INodeTypeDescription = JSON.parse(
-		JSON.stringify(originalTrigger.description),
-	) as INodeTypeDescription;
+	description: INodeTypeDescription = cloneTriggerDescriptionWithoutLegacySecret();
 
 	webhookMethods = {
 		default: {
 			async checkExists(this: IHookFunctions): Promise<boolean> {
-				const fingerprint = getCurrentSubscriptionFingerprint(this);
+				const fingerprint = await getCurrentSubscriptionFingerprint(this);
 				const staticData = this.getWorkflowStaticData('node') as IDataObject;
 				if (staticData[SUBSCRIPTION_FINGERPRINT_KEY] !== fingerprint) {
 					return false;
@@ -77,7 +93,7 @@ export class SecureMaxTrigger implements INodeType {
 				);
 			},
 			async create(this: IHookFunctions): Promise<boolean> {
-				const fingerprint = getCurrentSubscriptionFingerprint(this);
+				const fingerprint = await getCurrentSubscriptionFingerprint(this);
 				const securedContext = createSecuredMaxContext(this);
 
 				const deleted = await originalTrigger.webhookMethods.default.delete.call(securedContext);
@@ -112,7 +128,8 @@ export class SecureMaxTrigger implements INodeType {
 		const additionalFields = this.getNodeParameter('additionalFields', {}) as IDataObject;
 		let expectedSecret: string;
 		try {
-			expectedSecret = requireMaxWebhookSecret(additionalFields['secret']);
+			const credentials = await this.getCredentials('maxApi');
+			expectedSecret = resolveMaxWebhookSecret(credentials, additionalFields);
 		} catch {
 			this.getResponseObject().status(401).json({ error: 'Unauthorized' });
 			return { noWebhookResponse: true };
