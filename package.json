@@ -12,7 +12,7 @@
 	},
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/pfrankov/n8n-nodes-max.git"
+		"url": "https://github.com/andreybotkin/n8n-nodes-max.git"
 	},
 	"engines": {
 		"node": ">=20.15"
@@ -41,11 +41,11 @@
 	"n8n": {
 		"n8nNodesApiVersion": 1,
 		"credentials": [
-			"dist/credentials/MaxApi.credentials.js"
+			"dist/credentials/SecureMaxApi.credentials.js"
 		],
 		"nodes": [
-			"dist/nodes/Max/Max.node.js",
-			"dist/nodes/Max/MaxTrigger.node.js"
+			"dist/nodes/Max/SecureMax.node.js",
+			"dist/nodes/Max/SecureMaxTrigger.node.js"
 		]
 	},
 	"devDependencies": {
@@ -64,7 +64,8 @@
 		"typescript": "^5.9.3"
 	},
 	"dependencies": {
-		"@maxhub/max-bot-api": "^0.2.2"
+		"@maxhub/max-bot-api": "^0.2.2",
+		"form-data": "^4.0.4"
 	},
 	"peerDependencies": {
 		"n8n-workflow": "*"

@@ -21,6 +21,9 @@ module.exports = {
 			},
 		],
 	},
+	moduleNameMapper: {
+		'^form-data$': '<rootDir>/nodes/Max/tests/FormData.mock.ts',
+	},
 	collectCoverageFrom: [
 		'credentials/**/*.ts',
 		'nodes/**/*.ts',
