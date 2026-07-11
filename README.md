@@ -68,7 +68,7 @@ export N8N_CUSTOM_EXTENSIONS=n8n-nodes-max
 - В `Edit Message` опция `Disable Link Preview` добавляет `disable_link_preview=true` в query-параметры запроса редактирования
 - В `Edit Message` опция `Clear Attachments` удаляет текущие вложения сообщения, включая inline-клавиатуру
 - Отправка файлов (изображения, видео, аудио, документы)
-- Для вложений в `Send Message` доступны три источника: `Binary Data`, `URL` и готовый `Token` MAX
+- Для вложений в `Send Message` доступны два источника: `Binary Data` и готовый `Token` MAX; загрузка по произвольному URL отключена из соображений безопасности
 - В `Send Message` текст не обязателен, если отправляются вложения
 - В `Send Message` через `Additional Fields → Reply to Message ID` можно ответить на исходное сообщение, а через `Forward Message ID` — переслать оригинал
 - Нода не ограничивает вложения по расширению файла: формат проверяется на стороне Max API
@@ -90,12 +90,16 @@ export N8N_CUSTOM_EXTENSIONS=n8n-nodes-max
   - Нажатия на кнопки
   - События чатов
 - Поддержка webhook URL с интернационализированными доменами (IDN/Punycode) для корректной TLS-валидации
+- Обязательная проверка `X-Max-Bot-Api-Secret`: секрет должен содержать от 5 до 256 символов, запросы без совпадающего заголовка получают HTTP 401
+- Ограничения по chat/user ID работают fail-closed: событие без нужного ID не запускает workflow
 
 ## Настройка
 
 1. Создайте бота через @PrimeBot в Max мессенджере
 2. Получите токен доступа
 3. Добавьте токен в настройки ноды в n8n
+
+API endpoint зафиксирован на `https://platform-api2.max.ru` и не может быть заменён через credentials.
 
 ## Быстрый старт
 
@@ -126,7 +130,7 @@ export N8N_CUSTOM_EXTENSIONS=n8n-nodes-max
 ### Получение сообщений
 
 1. Добавьте ноду Max Trigger
-2. Настройте webhook
+2. Настройте webhook и обязательно задайте `Webhook Secret` длиной 5-256 символов
 3. Выберите типы событий для отслеживания
 
 ## Ресурсы

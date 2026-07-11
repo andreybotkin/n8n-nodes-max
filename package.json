@@ -19,7 +19,7 @@
 	},
 	"main": "index.js",
 	"scripts": {
-		"build": "npx rimraf dist && tsc && gulp build:icons",
+		"build": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsc && gulp build:icons",
 		"dev": "tsc --watch",
 		"format": "prettier nodes credentials --write",
 		"format:all": "prettier --write \"**/*.{ts,js,mjs,cjs,json,md,yml,yaml}\"",

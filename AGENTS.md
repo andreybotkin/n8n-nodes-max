@@ -42,13 +42,15 @@
 
 ### Key Design Decisions
 
-- Default API base URL is `https://platform-api.max.ru`.
+- API base URL is fixed to `https://platform-api2.max.ru` and is not editable in credentials.
 - Authentication is sent via `Authorization` header.
 - Message and webhook operations use direct HTTP requests for strict API-shape control.
-- Webhook processing is fail-soft: invalid events or filter issues should not crash trigger execution.
+- Max Trigger requires a 5-256 character webhook secret, verifies `X-Max-Bot-Api-Secret` before reading the event body, and rejects mismatches with HTTP 401.
+- Configured chat/user filters are fail-closed: events without the ID required by an active filter do not start the workflow.
 - Webhook subscription URLs are normalized to ASCII/Punycode hostnames before registration to avoid TLS issues on IDN domains.
 - Upload flow is two-step (`POST /uploads` then multipart upload to returned URL). For `image`, attachment payload is normalized from upload-step JSON response (`token`, `url`, `photos`). For `file`, the node uses `token` from the upload response. For `video`/`audio`, the node also supports the documented flow where `POST /uploads` returns `token` and the multipart upload responds with `retval`.
-- `Send Message` attachments support three input modes: `Binary Data`, `URL`, and `Token`. In `Token` mode, the node reuses an existing Max attachment token and sends `{ payload: { token } }` without a new upload.
+- `Send Message` attachments support `Binary Data` and `Token`. URL attachments are disabled to prevent server-side requests to untrusted destinations. In `Token` mode, the node reuses an existing Max attachment token and sends `{ payload: { token } }` without a new upload.
+- Multipart uploads are accepted only on the documented HTTPS upload hosts, never follow redirects, and never receive the bot `Authorization` header.
 - In the attachment UI, the source selector (`Attachment Source`) is shown before source-specific fields because it controls which fields become available.
 - Attachment validation on node side does not restrict file extension/MIME type; format acceptance is determined by Max API.
 - Message sending with media attachments retries on documented temporary processing errors (`attachment.not.ready` / `errors.process.attachment.file.not.processed`) before failing.
@@ -144,7 +146,7 @@
 ### Credentials
 
 - `accessToken`: issued by `@PrimeBot`.
-- `baseUrl`: defaults to `https://platform-api.max.ru`, override only for controlled environments.
+- The API endpoint is fixed to `https://platform-api2.max.ru`; credentials expose only the access token.
 - Keep credential test behavior aligned with official docs and current API auth expectations.
 
 ## API Alignment Protocol (Docs-First)

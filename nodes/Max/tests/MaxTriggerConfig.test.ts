@@ -116,7 +116,8 @@ describe('MaxTriggerConfig', () => {
 					password: true,
 				},
 				default: '',
-				description: 'A secret for the X-Max-Bot-Api-Secret header. Optional. 5-256 chars.',
+				description:
+					'Required secret for the X-Max-Bot-Api-Secret header. Must be 5-256 characters.',
 			});
 		});
 
