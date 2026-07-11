@@ -71,3 +71,5 @@ jobs:
           git add -A
           git commit -m "fix: harden MAX credentials, webhooks and attachments"
           git push origin HEAD:security/harden-max-node
+
+# Existing workflow; this follow-up commit intentionally triggers the one-shot job.
