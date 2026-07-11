@@ -13,7 +13,7 @@ import {
 	buildMaxWebhookFingerprint,
 	createSecuredMaxContext,
 	parseAllowedIds,
-	requireMaxWebhookSecret,
+	resolveMaxWebhookSecret,
 	validateMaxWebhookSecret,
 } from './SecurityUtils';
 
@@ -40,9 +40,10 @@ function passesFailClosedFilters(body: MaxWebhookEvent, additionalFields: IDataO
 	return true;
 }
 
-function getCurrentSubscriptionFingerprint(context: IHookFunctions): string {
+async function getCurrentSubscriptionFingerprint(context: IHookFunctions): Promise<string> {
 	const additionalFields = context.getNodeParameter('additionalFields', {}) as IDataObject;
-	const secret = requireMaxWebhookSecret(additionalFields['secret']);
+	const credentials = await context.getCredentials('maxApi');
+	const secret = resolveMaxWebhookSecret(credentials, additionalFields);
 	const events = context.getNodeParameter('events') as MaxTriggerEvent[];
 	const webhookUrl = context.getNodeWebhookUrl('default');
 	if (!webhookUrl) {
@@ -66,7 +67,7 @@ export class SecureMaxTrigger implements INodeType {
 	webhookMethods = {
 		default: {
 			async checkExists(this: IHookFunctions): Promise<boolean> {
-				const fingerprint = getCurrentSubscriptionFingerprint(this);
+				const fingerprint = await getCurrentSubscriptionFingerprint(this);
 				const staticData = this.getWorkflowStaticData('node') as IDataObject;
 				if (staticData[SUBSCRIPTION_FINGERPRINT_KEY] !== fingerprint) {
 					return false;
@@ -77,7 +78,7 @@ export class SecureMaxTrigger implements INodeType {
 				);
 			},
 			async create(this: IHookFunctions): Promise<boolean> {
-				const fingerprint = getCurrentSubscriptionFingerprint(this);
+				const fingerprint = await getCurrentSubscriptionFingerprint(this);
 				const securedContext = createSecuredMaxContext(this);
 
 				const deleted = await originalTrigger.webhookMethods.default.delete.call(securedContext);
@@ -112,7 +113,8 @@ export class SecureMaxTrigger implements INodeType {
 		const additionalFields = this.getNodeParameter('additionalFields', {}) as IDataObject;
 		let expectedSecret: string;
 		try {
-			expectedSecret = requireMaxWebhookSecret(additionalFields['secret']);
+			const credentials = await this.getCredentials('maxApi');
+			expectedSecret = resolveMaxWebhookSecret(credentials, additionalFields);
 		} catch {
 			this.getResponseObject().status(401).json({ error: 'Unauthorized' });
 			return { noWebhookResponse: true };
