@@ -1,7 +1,7 @@
 import { URL, domainToASCII } from 'node:url';
 import type { IDataObject, IHookFunctions } from 'n8n-workflow';
 import type { MaxSubscriptionsResponse, MaxTriggerEvent } from './MaxTriggerConfig';
-import { resolveMaxWebhookSecret } from './SecurityUtils';
+import { requireMaxWebhookSecret } from './SecurityUtils';
 
 /**
  * Convert URL hostname to punycode so MAX can validate TLS certificates
@@ -215,8 +215,12 @@ export class MaxWebhookManager {
 		const body: IDataObject = {
 			url: webhookUrl,
 			update_types: events,
-			secret: resolveMaxWebhookSecret(credentials, additionalFields),
 		};
+
+		const secretCandidate = credentials['webhookSecret'] ?? additionalFields['secret'];
+		if (typeof secretCandidate === 'string' && secretCandidate.trim().length > 0) {
+			body['secret'] = requireMaxWebhookSecret(secretCandidate);
+		}
 
 		const version = additionalFields['version'];
 		if (typeof version === 'string' && version.trim().length > 0) {
