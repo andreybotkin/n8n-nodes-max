@@ -34,7 +34,9 @@ export N8N_CUSTOM_EXTENSIONS=n8n-nodes-max
 
 ### n8n с предустановленной Max node
 
-Для Docker и Kubernetes можно использовать образ n8n, в который эта нода уже установлена:
+Для Docker и Kubernetes репозиторий также содержит сборку n8n, в которую эта нода уже установлена.
+
+После публикации образ доступен в GitHub Container Registry:
 
 ```bash
 docker pull ghcr.io/andreybotkin/n8n-with-max:<n8n-version>-latest
