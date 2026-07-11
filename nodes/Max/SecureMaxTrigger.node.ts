@@ -6,6 +6,7 @@ import type {
 	IWebhookFunctions,
 	IWebhookResponseData,
 } from 'n8n-workflow';
+import { NodeOperationError } from 'n8n-workflow';
 import { MaxTrigger as OriginalMaxTrigger } from './MaxTrigger.node';
 import type { MaxTriggerEvent, MaxWebhookEvent } from './MaxTriggerConfig';
 import {
@@ -45,7 +46,7 @@ function getCurrentSubscriptionFingerprint(context: IHookFunctions): string {
 	const events = context.getNodeParameter('events') as MaxTriggerEvent[];
 	const webhookUrl = context.getNodeWebhookUrl('default');
 	if (!webhookUrl) {
-		throw new Error('MAX webhook URL is not available');
+		throw new NodeOperationError(context.getNode(), 'MAX webhook URL is not available');
 	}
 
 	return buildMaxWebhookFingerprint({
@@ -81,7 +82,10 @@ export class SecureMaxTrigger implements INodeType {
 
 				const deleted = await originalTrigger.webhookMethods.default.delete.call(securedContext);
 				if (!deleted) {
-					throw new Error('Failed to replace the existing MAX webhook subscription');
+					throw new NodeOperationError(
+						this.getNode(),
+						'Failed to replace the existing MAX webhook subscription',
+					);
 				}
 
 				const created = await originalTrigger.webhookMethods.default.create.call(securedContext);
