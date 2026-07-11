@@ -4,6 +4,7 @@ import type {
 	IHttpRequestOptions,
 	IWebhookFunctions,
 } from 'n8n-workflow';
+import { SecureMaxApi } from '../../../credentials/SecureMaxApi.credentials';
 import { SecureMax } from '../SecureMax.node';
 import { passesFailClosedFilters, SecureMaxTrigger } from '../SecureMaxTrigger.node';
 import type { MaxWebhookEvent } from '../MaxTriggerConfig';
@@ -12,6 +13,7 @@ import {
 	hardenMaxHttpRequest,
 	MAX_API_BASE_URL,
 	requireMaxWebhookSecret,
+	resolveMaxWebhookSecret,
 	validateMaxWebhookSecret,
 } from '../SecurityUtils';
 
@@ -63,6 +65,33 @@ describe('MAX security wrappers', () => {
 		expect(() => requireMaxWebhookSecret('invalid$secret')).toThrow('may contain only');
 	});
 
+	it('prefers the encrypted credential secret and supports the legacy node field', () => {
+		expect(
+			resolveMaxWebhookSecret(
+				{ webhookSecret: 'credential_secret' },
+				{ secret: 'legacy_secret' },
+			),
+		).toBe('credential_secret');
+		expect(resolveMaxWebhookSecret({}, { secret: 'legacy_secret' })).toBe('legacy_secret');
+	});
+
+	it('defines webhook secret as a required password credential', () => {
+		const property = new SecureMaxApi().properties.find(
+			(candidate) => candidate.name === 'webhookSecret',
+		);
+
+		expect(property).toMatchObject({
+			type: 'string',
+			required: true,
+			typeOptions: { password: true },
+		});
+	});
+
+	it('does not expose the legacy webhook secret field in the trigger UI', () => {
+		const serializedDescription = JSON.stringify(new SecureMaxTrigger().description);
+		expect(serializedDescription).not.toContain('"name":"secret"');
+	});
+
 	it('creates a stable fingerprint and changes it for webhook configuration changes', () => {
 		const base = {
 			webhookUrl: 'https://n8n.example.com/webhook/max',
@@ -83,7 +112,8 @@ describe('MAX security wrappers', () => {
 
 	it('rejects webhook activation without a valid secret', async () => {
 		const context = {
-			getNodeParameter: jest.fn().mockReturnValue({ secret: '' }),
+			getNodeParameter: jest.fn().mockReturnValue({}),
+			getCredentials: jest.fn().mockResolvedValue({ webhookSecret: '' }),
 		} as unknown as IHookFunctions;
 
 		await expect(
@@ -92,27 +122,36 @@ describe('MAX security wrappers', () => {
 	});
 
 	it.each([
-		['a missing secret setting', {}, {}],
-		['a missing header', { secret: 'expected' }, {}],
-		['an invalid header', { secret: 'expected' }, { 'x-max-bot-api-secret': 'wrong' }],
-	])('rejects %s before processing an event', async (_case, additionalFields, headers) => {
-		const status = jest.fn();
-		const json = jest.fn();
-		status.mockReturnValue({ json });
-		const context = {
-			getNodeParameter: jest.fn().mockReturnValue(additionalFields),
-			getHeaderData: jest.fn().mockReturnValue(headers),
-			getResponseObject: jest.fn().mockReturnValue({ status }),
-			getBodyData: jest.fn(),
-		} as unknown as IWebhookFunctions;
+		['a missing secret setting', {}, {}, {}],
+		['a missing header', { webhookSecret: 'expected' }, {}, {}],
+		[
+			'an invalid header',
+			{ webhookSecret: 'expected' },
+			{},
+			{ 'x-max-bot-api-secret': 'wrong' },
+		],
+	])(
+		'rejects %s before processing an event',
+		async (_case, credentials, additionalFields, headers) => {
+			const status = jest.fn();
+			const json = jest.fn();
+			status.mockReturnValue({ json });
+			const context = {
+				getNodeParameter: jest.fn().mockReturnValue(additionalFields),
+				getCredentials: jest.fn().mockResolvedValue(credentials),
+				getHeaderData: jest.fn().mockReturnValue(headers),
+				getResponseObject: jest.fn().mockReturnValue({ status }),
+				getBodyData: jest.fn(),
+			} as unknown as IWebhookFunctions;
 
-		await expect(new SecureMaxTrigger().webhook.call(context)).resolves.toEqual({
-			noWebhookResponse: true,
-		});
-		expect(status).toHaveBeenCalledWith(401);
-		expect(json).toHaveBeenCalledWith({ error: 'Unauthorized' });
-		expect(context.getBodyData).not.toHaveBeenCalled();
-	});
+			await expect(new SecureMaxTrigger().webhook.call(context)).resolves.toEqual({
+				noWebhookResponse: true,
+			});
+			expect(status).toHaveBeenCalledWith(401);
+			expect(json).toHaveBeenCalledWith({ error: 'Unauthorized' });
+			expect(context.getBodyData).not.toHaveBeenCalled();
+		},
+	);
 
 	it('removes URL attachments from the n8n node UI', () => {
 		const serializedDescription = JSON.stringify(new SecureMax().description);
