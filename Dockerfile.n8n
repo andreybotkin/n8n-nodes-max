@@ -1,0 +1,34 @@
+# syntax=docker/dockerfile:1.7
+
+FROM node:24-alpine AS node-builder
+
+WORKDIR /src
+
+COPY package.json package-lock.json ./
+RUN npm ci --ignore-scripts
+
+COPY . .
+RUN npm run lint \
+ && npm test -- --runInBand \
+ && npm run build \
+ && mkdir -p /packages \
+ && npm pack --ignore-scripts --pack-destination /packages
+
+FROM node:24-alpine AS extension-builder
+
+WORKDIR /opt/n8n-custom
+RUN npm init -y
+
+COPY --from=node-builder /packages/n8n-nodes-max-*.tgz /tmp/n8n-nodes-max.tgz
+RUN npm install --omit=dev --ignore-scripts /tmp/n8n-nodes-max.tgz \
+ && rm -f /tmp/n8n-nodes-max.tgz
+
+ARG N8N_VERSION
+FROM n8nio/n8n:${N8N_VERSION}
+
+USER root
+COPY --from=extension-builder --chown=node:node /opt/n8n-custom /opt/n8n-custom
+
+ENV N8N_CUSTOM_EXTENSIONS=/opt/n8n-custom/node_modules/n8n-nodes-max/dist
+
+USER node
