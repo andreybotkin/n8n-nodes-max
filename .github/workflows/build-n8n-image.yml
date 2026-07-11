@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       n8n_version:
-        description: Exact n8n image tag currently used in k3s
+        description: Exact n8n image tag to use as the base image
         required: true
         type: string
 
@@ -41,5 +41,5 @@ jobs:
           build-args: |
             N8N_VERSION=${{ inputs.n8n_version }}
           tags: |
-            ghcr.io/andreybotkin/mzot-n8n-max:${{ inputs.n8n_version }}-${{ github.sha }}
-            ghcr.io/andreybotkin/mzot-n8n-max:${{ inputs.n8n_version }}-latest
+            ghcr.io/andreybotkin/n8n-with-max:${{ inputs.n8n_version }}-${{ github.sha }}
+            ghcr.io/andreybotkin/n8n-with-max:${{ inputs.n8n_version }}-latest
