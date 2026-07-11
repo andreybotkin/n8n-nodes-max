@@ -1,41 +1,51 @@
-# Развёртывание в n8n на k3s
+# Развёртывание n8n с предустановленной Max node в Kubernetes
 
-Проект разворачивается как собственный immutable-образ n8n. Нода находится в `/opt/n8n-custom`, поэтому существующий PVC `/home/node/.n8n` не перекрывает её при монтировании.
+Репозиторий содержит `Dockerfile.n8n`, который собирает образ n8n с уже установленной community node `n8n-nodes-max`.
 
-## 1. Узнать текущую версию n8n
+Нода размещается в `/opt/n8n-custom`, поэтому стандартный volume `/home/node/.n8n` не перекрывает её при монтировании.
 
-Нельзя собирать образ от `latest`: версия основы должна совпадать с работающей в кластере.
+## 1. Выбрать версию n8n
+
+Рекомендуется использовать точный тег n8n, а не `latest`.
+
+Узнать образ работающего pod можно командой:
 
 ```bash
-kubectl -n dataflow get pods \
-  -l app.kubernetes.io/instance=n8n \
+kubectl -n <namespace> get pods \
+  -l app.kubernetes.io/instance=<release-name> \
   -o jsonpath='{.items[0].spec.containers[0].image}{"\n"}'
 ```
 
-Пример результата:
+Пример:
 
 ```text
 n8nio/n8n:2.29.9
 ```
 
-## 2. Собрать образ через GitHub Actions
+## 2. Использовать готовый образ
 
-1. Откройте **Actions → Build n8n image with MAX node → Run workflow**.
-2. Введите точный тег n8n, например `2.29.9`.
-3. Workflow опубликует два тега:
+Образы публикуются в GitHub Container Registry:
 
 ```text
-ghcr.io/andreybotkin/mzot-n8n-max:<n8n-version>-<commit-sha>
-ghcr.io/andreybotkin/mzot-n8n-max:<n8n-version>-latest
+ghcr.io/andreybotkin/n8n-with-max:<n8n-version>-<commit-sha>
+ghcr.io/andreybotkin/n8n-with-max:<n8n-version>-latest
 ```
 
-Для production используйте тег с полным commit SHA, а не `latest`.
+Для production рекомендуется использовать immutable-тег с commit SHA.
 
-Локальная сборка эквивалентна:
+```bash
+docker pull ghcr.io/andreybotkin/n8n-with-max:<n8n-version>-<commit-sha>
+```
+
+## 3. Собрать образ самостоятельно
+
+В GitHub Actions доступен ручной workflow **Build n8n image with MAX node**. При запуске нужно указать точный тег базового образа n8n.
+
+Локальная сборка:
 
 ```bash
 N8N_VERSION=2.29.9
-IMAGE=ghcr.io/andreybotkin/mzot-n8n-max:${N8N_VERSION}-$(git rev-parse HEAD)
+IMAGE=ghcr.io/<owner>/n8n-with-max:${N8N_VERSION}-$(git rev-parse HEAD)
 
 docker buildx build \
   --platform linux/amd64 \
@@ -46,106 +56,108 @@ docker buildx build \
   .
 ```
 
-## 3. Доступ k3s к приватному GHCR
+## 4. Настроить Helm values
 
-Если GHCR package приватный, создайте token с правом `read:packages` и Kubernetes secret:
-
-```bash
-kubectl -n dataflow create secret docker-registry ghcr-pull \
-  --docker-server=ghcr.io \
-  --docker-username=andreybotkin \
-  --docker-password="$GHCR_TOKEN"
-```
-
-## 4. Изменить `n8n-helm.yaml`
-
-Замените верхнеуровневый блок `image`:
+Для `community-charts/n8n` замените образ:
 
 ```yaml
 image:
-  repository: ghcr.io/andreybotkin/mzot-n8n-max
+  repository: ghcr.io/andreybotkin/n8n-with-max
   pullPolicy: IfNotPresent
-  tag: "<n8n-version>-<full-commit-sha>"
-
-imagePullSecrets:
-  - name: ghcr-pull
+  tag: "<n8n-version>-<commit-sha>"
 ```
 
-Добавьте в существующий `main.extraEnvVars`:
+Путь к custom node уже задан внутри образа:
+
+```text
+/opt/n8n-custom/node_modules/n8n-nodes-max/dist
+```
+
+При необходимости его можно явно указать в Helm values:
 
 ```yaml
 main:
   extraEnvVars:
-    WEBHOOK_URL: "https://n8n.almostmind.com/"
-    N8N_EDITOR_BASE_URL: "https://n8n.almostmind.com/"
-    N8N_HOST: "n8n.almostmind.com"
-    N8N_PROTOCOL: "https"
-    N8N_LISTEN_ADDRESS: "0.0.0.0"
-    N8N_PROXY_HOPS: "1"
     N8N_CUSTOM_EXTENSIONS: "/opt/n8n-custom/node_modules/n8n-nodes-max/dist"
 ```
 
-`N8N_CUSTOM_EXTENSIONS` уже записан в образ, но его явное указание в Helm values делает конфигурацию видимой и упрощает диагностику.
+Если образ приватный, добавьте Kubernetes image pull secret:
 
-При `worker.mode: regular` отдельные worker и webhook pods не запускаются: ноду загружает main pod. Если позднее режим будет переключён на `queue`, тот же custom image и `N8N_CUSTOM_EXTENSIONS` должны использовать main, worker и webhook pods.
+```bash
+kubectl -n <namespace> create secret docker-registry ghcr-pull \
+  --docker-server=ghcr.io \
+  --docker-username=<github-user> \
+  --docker-password="$GHCR_TOKEN"
+```
+
+И укажите его в values:
+
+```yaml
+imagePullSecrets:
+  - name: ghcr-pull
+```
 
 ## 5. Обновить Helm release
 
 ```bash
 helm repo update
 
-helm upgrade n8n community-charts/n8n \
-  --namespace dataflow \
-  -f ./config/dataflow/n8n-helm.yaml
-
-kubectl -n dataflow rollout status deployment/n8n-main
+helm upgrade <release-name> community-charts/n8n \
+  --namespace <namespace> \
+  -f values.yaml
 ```
 
-Если имя Deployment отличается:
+Проверить rollout:
 
 ```bash
-kubectl -n dataflow get deployments \
-  -l app.kubernetes.io/instance=n8n
+kubectl -n <namespace> get deployments \
+  -l app.kubernetes.io/instance=<release-name>
+
+kubectl -n <namespace> rollout status deployment/<deployment-name>
 ```
 
 ## 6. Проверить загрузку ноды
 
 ```bash
-POD=$(kubectl -n dataflow get pods \
-  -l app.kubernetes.io/instance=n8n \
+POD=$(kubectl -n <namespace> get pods \
+  -l app.kubernetes.io/instance=<release-name> \
   -o jsonpath='{.items[0].metadata.name}')
 
-kubectl -n dataflow exec "$POD" -- \
+kubectl -n <namespace> exec "$POD" -- \
   node -p "require('/opt/n8n-custom/node_modules/n8n-nodes-max/package.json').version"
 
-kubectl -n dataflow exec "$POD" -- \
+kubectl -n <namespace> exec "$POD" -- \
   ls -la /opt/n8n-custom/node_modules/n8n-nodes-max/dist/nodes/Max
 ```
 
-В каталоге должны присутствовать `SecureMax.node.js` и `SecureMaxTrigger.node.js`. После этого в редакторе n8n появятся `Max` и `Max Trigger`.
+В каталоге должны присутствовать:
 
-## 7. Настроить MAX Trigger
+```text
+SecureMax.node.js
+SecureMaxTrigger.node.js
+```
+
+После перезапуска в редакторе n8n должны появиться `Max` и `Max Trigger`.
+
+## 7. Настроить Max Trigger
 
 1. Создайте Max credentials с access token бота.
 2. Добавьте `Max Trigger`.
-3. Задайте Webhook Secret из разрешённых символов `A-Z`, `a-z`, `0-9`, `_`, `-`, длиной 5-256 символов.
+3. Задайте Webhook Secret длиной 5-256 символов. Разрешены латинские буквы, цифры, `_` и `-`.
 4. Активируйте workflow.
-5. После смены secret, списка events или API version деактивируйте и снова активируйте workflow. Нода удалит старую подписку и создаст новую.
 
-Сгенерировать безопасный secret:
+Сгенерировать secret:
 
 ```bash
 openssl rand -hex 32
 ```
 
+После изменения secret, списка events, API version или внешнего webhook URL деактивируйте и снова активируйте workflow. Нода заменит существующую подписку.
+
+## Queue mode
+
+Если n8n работает в queue mode, один и тот же образ должен использоваться main, worker и webhook pods. У всех экземпляров также должен быть одинаковый `N8N_ENCRYPTION_KEY`.
+
 ## Откат
 
-Верните предыдущий immutable image tag и выполните Helm upgrade:
-
-```bash
-helm upgrade n8n community-charts/n8n \
-  --namespace dataflow \
-  -f ./config/dataflow/n8n-helm.yaml
-```
-
-Данные n8n, credentials и binary files останутся на существующем PVC `n8n-pvc`.
+Верните предыдущий immutable image tag и повторите `helm upgrade`. Данные n8n сохранятся в используемых PostgreSQL и persistent volumes.
