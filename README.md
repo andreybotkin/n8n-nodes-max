@@ -1,142 +1,123 @@
 # n8n-nodes-max
 
-[![npm version](https://img.shields.io/npm/v/n8n-nodes-max?logo=npm)](https://www.npmjs.com/package/n8n-nodes-max)
+Нода для интеграции мессенджера MAX с n8n: исходящие сообщения, вложения, inline-кнопки и webhook trigger.
 
-Нода для интеграции мессенджера Max с платформой автоматизации n8n.
-<img width="518" height="429" alt="image" src="https://github.com/user-attachments/assets/577165bb-510f-4523-b898-76ea94dc0f2b" />
+Этот fork содержит дополнительные исправления безопасности для MZOT. Пакет `n8n-nodes-max` из публичного npm registry может содержать upstream-версию без этих исправлений, поэтому для k3s используйте custom n8n image из этого репозитория.
 
 ## Установка
 
-### Для self-hosted n8n
+### k3s + community-charts/n8n
 
-1. Установите пакет через npm в директории n8n:
-
-```bash
-npm install n8n-nodes-max
-```
-
-2. Перезапустите n8n для загрузки новой ноды
-
-### Для n8n Cloud
-
-1. Откройте настройки вашего workspace
-2. Перейдите в раздел "Community nodes"
-3. Нажмите "Install a community node"
-4. Введите `n8n-nodes-max` и нажмите "Install"
-
-### Альтернативный способ (переменная окружения)
-
-Добавьте пакет в переменную окружения:
+Рекомендуемый способ — собрать immutable-образ n8n с нодой внутри:
 
 ```bash
-export N8N_CUSTOM_EXTENSIONS=n8n-nodes-max
+docker buildx build \
+  --platform linux/amd64 \
+  --build-arg N8N_VERSION=<точный-тег-n8n> \
+  -f Dockerfile.n8n \
+  -t ghcr.io/andreybotkin/mzot-n8n-max:<тег> \
+  --push \
+  .
 ```
 
-**Полезные ссылки:**
+После этого укажите образ в Helm values:
 
-- [Официальная документация по установке community nodes](https://docs.n8n.io/integrations/community-nodes/installation/)
-- [Руководство по self-hosted установке](https://docs.n8n.io/hosting/)
+```yaml
+image:
+  repository: ghcr.io/andreybotkin/mzot-n8n-max
+  pullPolicy: IfNotPresent
+  tag: "<тег>"
 
-## Для разработки
+main:
+  extraEnvVars:
+    N8N_CUSTOM_EXTENSIONS: "/opt/n8n-custom/node_modules/n8n-nodes-max/dist"
+```
 
-- После `npm install` автоматически устанавливается Husky pre-commit hook.
-- Перед коммитом запускается Prettier для staged исходников (`*.{ts,js,mjs,cjs,json,md,yml,yaml}`).
+Полная инструкция для MZOT: [`docs/k3s-deployment.md`](docs/k3s-deployment.md).
 
-## Релиз
+### Локальная разработка
 
-1. Подготовьте изменения и закоммитьте их обычным git-коммитом.
-2. Выберите semver-тип релиза и создайте commit+tag командой `npm version patch`, `npm version minor` или `npm version major`.
-3. Запушьте ветку и теги командой `git push origin master --follow-tags`.
-4. GitHub Actions опубликует пакет в npm по пушу тега `v*.*.*`.
+```bash
+npm ci --ignore-scripts
+npm run build
+npm link
+npm install --prefix ~/.n8n/custom file:$(pwd)
+n8n start
+```
 
-Автопубликация использует npm Trusted Publisher через GitHub Actions OIDC, без `NPM_TOKEN`.
-В настройках пакета npm trusted publisher должен указывать:
-
-- Organization or user: `pfrankov`
-- Repository: `n8n-nodes-max`
-- Workflow filename: `publish-npm.yml`
-- Allowed actions: `npm publish`
+`N8N_CUSTOM_EXTENSIONS` принимает путь к каталогу custom nodes, а не имя npm-пакета.
 
 ## Возможности
 
 ### Сообщения
 
-- Отправка текстовых сообщений с форматированием
-- Автоматический fallback в plain text при ошибке Max API о неподдерживаемом Markdown
-- Редактирование и удаление сообщений
-- Для `Edit Message` нода отправляет `message_id` в query-параметре запроса `PUT /messages?message_id=...`
-- В `Edit Message` опция `Disable Link Preview` добавляет `disable_link_preview=true` в query-параметры запроса редактирования
-- В `Edit Message` опция `Clear Attachments` удаляет текущие вложения сообщения, включая inline-клавиатуру
-- Отправка файлов (изображения, видео, аудио, документы)
-- Для вложений в `Send Message` доступны два источника: `Binary Data` и готовый `Token` MAX; загрузка по произвольному URL отключена из соображений безопасности
-- В `Send Message` текст не обязателен, если отправляются вложения
-- В `Send Message` через `Additional Fields → Reply to Message ID` можно ответить на исходное сообщение, а через `Forward Message ID` — переслать оригинал
-- Нода не ограничивает вложения по расширению файла: формат проверяется на стороне Max API
-- Payload вложения зависит от типа файла: для `image` используются поля из JSON-ответа upload-шага (`token`/`photos`/`url`), для `file` используется `token` из upload-ответа, а для `video`/`audio` нода также поддерживает токен из `POST /uploads`, если upload endpoint возвращает `retval`
-- Если у вас уже есть `payload.token` из Max API, выберите `Attachment Source = Token`: нода отправит вложение без повторного скачивания и upload
-- Автоматический ретрай отправки с медиа-вложением при временной ошибке `attachment.not.ready`
-- Явная валидация ID получателя: `0` отклоняется с подсказкой по полям из `Max Trigger`
-- Интерактивные клавиатуры с кнопками
+- Отправка текстовых сообщений с форматированием.
+- Автоматический fallback в plain text при ошибке MAX API о неподдерживаемом Markdown.
+- Редактирование и удаление сообщений.
+- `Disable Link Preview` и очистка текущих вложений при редактировании.
+- Отправка изображений, видео, аудио и документов через Binary Data.
+- Повторное использование готового MAX attachment token без новой загрузки.
+- Несколько вложений в одном сообщении.
+- Reply и forward.
+- Автоматический retry при временной ошибке обработки media attachment.
+- Inline-клавиатуры и callback.
+
+Загрузка вложений по произвольному URL отключена: это предотвращает SSRF, запросы к внутренним сервисам и неконтролируемую загрузку больших файлов в память.
 
 ### Чаты
 
-- Получение информации о чате
-- Выход из групповых чатов
+- Получение информации о чате.
+- Выход из группового чата.
 
-### Триггер
+### Trigger
 
-- Получение событий в реальном времени:
-  - Новые сообщения в личных диалогах (`message_created`) и чатах (`message_chat_created`)
-  - Нажатия на кнопки
-  - События чатов
-- Поддержка webhook URL с интернационализированными доменами (IDN/Punycode) для корректной TLS-валидации
-- Обязательная проверка `X-Max-Bot-Api-Secret`: секрет должен содержать от 5 до 256 символов, запросы без совпадающего заголовка получают HTTP 401
-- Ограничения по chat/user ID работают fail-closed: событие без нужного ID не запускает workflow
+- `message_created` и `message_chat_created`.
+- Callback кнопок.
+- События пользователей, чатов и бота.
+- Поддержка IDN/Punycode webhook URL.
+- Обязательная проверка `X-Max-Bot-Api-Secret`.
+- Fail-closed фильтры chat/user ID.
+- Автоматическое пересоздание подписки при смене secret, events, API version или webhook URL.
+
+## Безопасность
+
+- MAX API закреплён на `https://platform-api2.max.ru`.
+- Credentials содержат только access token; Base URL нельзя заменить через UI.
+- Bot token не отправляется на multipart upload endpoint.
+- Multipart upload разрешён только на документированных HTTPS-хостах MAX и не следует redirects.
+- Webhook Secret должен содержать 5-256 символов из `A-Z`, `a-z`, `0-9`, `_`, `-`.
+- URL attachments отсутствуют в UI и дополнительно блокируются во время выполнения.
 
 ## Настройка
 
-1. Создайте бота через @PrimeBot в Max мессенджере
-2. Получите токен доступа
-3. Добавьте токен в настройки ноды в n8n
+1. Создайте бота через MAX для бизнеса.
+2. Получите access token.
+3. Создайте в n8n credentials `Max API`.
+4. Для входящих событий добавьте `Max Trigger`, выберите events и задайте Webhook Secret.
+5. Активируйте workflow.
 
-API endpoint зафиксирован на `https://platform-api2.max.ru` и не может быть заменён через credentials.
+Сгенерировать secret:
 
-## Быстрый старт
+```bash
+openssl rand -hex 32
+```
 
-### Отправка сообщения
+После изменения secret, events или API version деактивируйте и снова активируйте workflow. Нода заменит старую MAX subscription.
 
-1. Добавьте ноду Max в workflow
-2. Выберите операцию "Send Message"
-3. Укажите ID получателя; при необходимости добавьте текст
-4. Чтобы отправить только файл/медиа, оставьте `Message Text` пустым и добавьте вложение в `Additional Fields → Attachments`
-5. Чтобы переиспользовать уже загруженный файл, выберите `Additional Fields → Attachments → Attachment Source = Token` и вставьте `File Token`
-6. Запустите workflow
+## Проверки
 
-### Пересылка входящего сообщения
-
-1. Добавьте `Max Trigger` и подпишитесь на `message_created` или `message_chat_created`
-2. Добавьте `Max` → `Send Message`
-3. В `Send To` выберите `Chat` и укажите ID группы поддержки
-4. Оставьте `Message Text` пустым
-5. В `Additional Fields` добавьте `Forward Message ID` и передайте `={{$json.event_context.message_id}}`
-6. Оставьте остальные additional fields по необходимости, например `Notify`
-
-### Удаление inline-кнопок при редактировании
-
-1. Выберите операцию `Edit Message`
-2. Укажите `Message ID` и новый текст
-3. Включите `Clear Attachments`, чтобы Max API получил `attachments: []` и удалил текущую inline-клавиатуру
-
-### Получение сообщений
-
-1. Добавьте ноду Max Trigger
-2. Настройте webhook и обязательно задайте `Webhook Secret` длиной 5-256 символов
-3. Выберите типы событий для отслеживания
+```bash
+npm ci --ignore-scripts
+npm run lint
+npm test -- --runInBand
+npm run build
+```
 
 ## Ресурсы
 
-- [Документация Max Bot API](https://dev.max.ru/docs-api)
-- [GitHub репозиторий](https://github.com/pfrankov/n8n-nodes-max)
+- [Документация MAX Bot API](https://dev.max.ru/docs-api)
+- [Репозиторий fork](https://github.com/andreybotkin/n8n-nodes-max)
+- [Upstream](https://github.com/pfrankov/n8n-nodes-max)
 
 ## Лицензия
 
