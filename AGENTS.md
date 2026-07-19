@@ -62,6 +62,7 @@
 - `Send Message` allows non-text requests: `text` may be empty when at least one attachment is present or when a reply/forward link is provided.
 - Recipient ID validation rejects `0` for `sendMessage` and returns guidance for Max Trigger field mapping (`message.sender.user_id` for user, `message.recipient.chat_id` for chat).
 - Keyboard validation enforces documented limits (rows/buttons/text/payload/url and limited-type per-row constraints).
+- `Send Message` and `Edit Message` operations support dynamic inline keyboard parsing via `Inline Keyboard JSON` (`inlineKeyboardJson`), accepting n8n fixedCollection JSON, Max API native button arrays, and nested payload attachments.
 
 ## Project Structure & Module Organization
 

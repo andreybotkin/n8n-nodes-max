@@ -2059,39 +2059,71 @@ export function processKeyboardFromParameters(
 export function processKeyboardFromAdditionalFields(
 	keyboardData: IDataObject,
 ): IMaxAttachment | null {
+	if (!keyboardData || typeof keyboardData !== 'object') {
+		return null;
+	}
+
+	let targetData: any = keyboardData;
+
 	if (
-		!keyboardData ||
-		!keyboardData['buttons'] ||
-		!Array.isArray(keyboardData['buttons']) ||
-		keyboardData['buttons'].length === 0
+		targetData.payload &&
+		typeof targetData.payload === 'object' &&
+		!Array.isArray(targetData.payload)
 	) {
+		targetData = targetData.payload;
+	}
+
+	let rawButtons: any[] | undefined;
+	if (Array.isArray(targetData)) {
+		rawButtons = targetData;
+	} else if (Array.isArray(targetData.buttons)) {
+		rawButtons = targetData.buttons;
+	}
+
+	if (!rawButtons || rawButtons.length === 0) {
 		return null;
 	}
 
 	try {
-		// Convert n8n parameter format to button config format
 		const buttonRows: IButtonConfig[][] = [];
 
-		for (const rowData of keyboardData['buttons'] as any[]) {
+		const parseButton = (buttonData: any): IButtonConfig => {
+			const btn: IButtonConfig = {
+				text: buttonData.text || '',
+				type: buttonData.type || 'callback',
+				intent: buttonData.intent || 'default',
+			};
+			if (buttonData.payload) btn.payload = buttonData.payload;
+			if (buttonData.url) btn.url = buttonData.url;
+			const chatTitle = buttonData.chat_title || buttonData.chatTitle;
+			if (chatTitle) btn.chat_title = chatTitle;
+			const chatDesc = buttonData.chat_description || buttonData.chatDescription;
+			if (chatDesc) btn.chat_description = chatDesc;
+			const startPayload = buttonData.start_payload || buttonData.startPayload;
+			if (startPayload) btn.start_payload = startPayload;
+			const uuid = normalizeButtonUuid(buttonData.uuid);
+			if (uuid !== undefined) btn.uuid = uuid;
+			return btn;
+		};
+
+		for (const rowData of rawButtons) {
+			if (!rowData) continue;
+
 			if (
 				rowData.row &&
 				rowData.row.button &&
 				Array.isArray(rowData.row.button) &&
 				rowData.row.button.length > 0
 			) {
-				const row: IButtonConfig[] = rowData.row.button.map((buttonData: any) => ({
-					text: buttonData.text || '',
-					type: buttonData.type || 'callback',
-					payload: buttonData.payload || undefined,
-					url: buttonData.url || undefined,
-					chat_title: buttonData.chatTitle || undefined,
-					chat_description: buttonData.chatDescription || undefined,
-					start_payload: buttonData.startPayload || undefined,
-					uuid: normalizeButtonUuid(buttonData.uuid),
-					intent: buttonData.intent || 'default',
-				}));
-
+				const row: IButtonConfig[] = rowData.row.button.map(parseButton);
 				buttonRows.push(row);
+			} else if (Array.isArray(rowData)) {
+				const row: IButtonConfig[] = rowData.map(parseButton);
+				if (row.length > 0) {
+					buttonRows.push(row);
+				}
+			} else if (typeof rowData === 'object' && rowData !== null && 'text' in rowData) {
+				buttonRows.push([parseButton(rowData)]);
 			}
 		}
 
@@ -2101,6 +2133,6 @@ export function processKeyboardFromAdditionalFields(
 
 		return createInlineKeyboardAttachment(buttonRows);
 	} catch (error) {
-		throw new Error(`Failed to process inline keyboard: ${error.message}`);
+		throw new Error(`Failed to process inline keyboard: ${(error as Error).message}`);
 	}
 }

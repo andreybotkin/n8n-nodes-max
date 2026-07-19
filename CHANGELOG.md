@@ -1,5 +1,26 @@
 # Журнал изменений
 
+## v0.1.25 - 2026-07-19
+
+### Добавлено
+
+- В операциях `Send Message` и `Edit Message` ноды `Max` добавлено поле `Inline Keyboard JSON` (`inlineKeyboardJson`) для динамической передачи клавиатур через выражения n8n.
+- Поддержка различных JSON-структур клавиатур: n8n fixedCollection (`{"buttons":[{"row":{"button":[...]}}]}`), нативный 2D-массив Max API (`{"buttons":[[...]]}` / `[[...]]`), а также объекты с обёрткой `payload`.
+
+### Для разработки
+
+- Добавлены юнит-тесты в `GenericFunctions.test.ts` и `Max.node.test.ts` для проверки `inlineKeyboardJson`, валидации JSON и парсинга мультиформатных клавиатур.
+
+### Кому важно
+
+- Пользователям, динамически формирующим клавиатуры в workflow (например, через ноду `Code` или expressions вроде `{{ JSON.stringify($json.payload?.inline_keyboard) }}`).
+
+### Что проверить после обновления
+
+- В операциях `Send Message` и `Edit Message` передать JSON-строку клавиатуры в поле `Inline Keyboard JSON` и убедиться, что кнопки отображаются в сообщении.
+- Передать некорректную JSON-строку в `Inline Keyboard JSON` и убедиться в получении понятной ошибки `Inline Keyboard JSON is invalid`.
+- Оставить `Inline Keyboard JSON` пустым и убедиться, что обычная настройка `Inline Keyboard` из UI работает по-прежнему.
+
 ## v0.1.24ab1 - 2026-07-15
 
 ### Улучшено

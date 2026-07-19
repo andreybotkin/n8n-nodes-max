@@ -26,6 +26,7 @@ import {
 	formatInlineKeyboard,
 	createInlineKeyboardAttachment,
 	processKeyboardFromParameters,
+	processKeyboardFromAdditionalFields,
 } from '../GenericFunctions';
 import {
 	createMockExecuteFunctions,
@@ -2695,6 +2696,93 @@ describe('GenericFunctions - Comprehensive Test Suite', () => {
 				NodeOperationError,
 				/Failed to process inline keyboard/,
 			);
+		});
+	});
+
+	describe('processKeyboardFromAdditionalFields', () => {
+		it('should parse n8n fixedCollection keyboard format', () => {
+			const keyboardData = {
+				buttons: [
+					{
+						row: {
+							button: [
+								{
+									text: 'OK',
+									type: 'callback',
+									payload: 'ok_clicked',
+								},
+							],
+						},
+					},
+				],
+			};
+
+			const result = processKeyboardFromAdditionalFields(keyboardData);
+			expect(result).not.toBeNull();
+			expect(result?.type).toBe('inline_keyboard');
+			expect(result?.payload.buttons).toEqual([
+				[{ text: 'OK', type: 'callback', payload: 'ok_clicked' }],
+			]);
+		});
+
+		it('should parse Max API 2D button array format', () => {
+			const keyboardData = {
+				buttons: [[{ text: 'Yes', type: 'callback', payload: 'confirm' }]],
+			};
+
+			const result = processKeyboardFromAdditionalFields(keyboardData);
+			expect(result).not.toBeNull();
+			expect(result?.type).toBe('inline_keyboard');
+			expect(result?.payload.buttons).toEqual([
+				[{ text: 'Yes', type: 'callback', payload: 'confirm' }],
+			]);
+		});
+
+		it('should parse nested payload attachment format', () => {
+			const keyboardData = {
+				type: 'inline_keyboard',
+				payload: {
+					buttons: [[{ text: 'Open URL', type: 'link', url: 'https://example.com' }]],
+				},
+			};
+
+			const result = processKeyboardFromAdditionalFields(keyboardData);
+			expect(result).not.toBeNull();
+			expect(result?.type).toBe('inline_keyboard');
+			expect(result?.payload.buttons).toEqual([
+				[{ text: 'Open URL', type: 'link', url: 'https://example.com' }],
+			]);
+		});
+
+		it('should support snake_case button fields for chat type button', () => {
+			const keyboardData = {
+				buttons: [
+					[
+						{
+							text: 'Create Group',
+							type: 'chat',
+							chat_title: 'My Group',
+							chat_description: 'Group desc',
+						},
+					],
+				],
+			};
+
+			const result = processKeyboardFromAdditionalFields(keyboardData);
+			expect(result).not.toBeNull();
+			const buttons = (result?.payload as any).buttons;
+			expect(buttons[0][0]).toEqual({
+				text: 'Create Group',
+				type: 'chat',
+				chat_title: 'My Group',
+				chat_description: 'Group desc',
+			});
+		});
+
+		it('should return null for empty or non-object keyboard data', () => {
+			expect(processKeyboardFromAdditionalFields(null as any)).toBeNull();
+			expect(processKeyboardFromAdditionalFields({} as any)).toBeNull();
+			expect(processKeyboardFromAdditionalFields({ buttons: [] })).toBeNull();
 		});
 	});
 

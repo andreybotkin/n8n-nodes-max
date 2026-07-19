@@ -2,21 +2,26 @@ import { Max } from '../Max.node';
 import type { IExecuteFunctions, INodeExecutionData } from 'n8n-workflow';
 import { SAMPLE_MESSAGES, TEST_MESSAGE_ID, WORKFLOW_TEST_DATA } from './fixtures/testData';
 
-// Mock the entire GenericFunctions module
-jest.mock('../GenericFunctions', () => ({
-	createMaxBotInstance: jest.fn().mockReturnValue({}), // Mock bot instance
-	sendMessage: jest.fn().mockResolvedValue({ message_id: '12345' }),
-	editMessage: jest.fn().mockResolvedValue({ success: true }),
-	deleteMessage: jest.fn().mockResolvedValue({ success: true }),
-	answerCallbackQuery: jest.fn().mockResolvedValue({ success: true }),
-	getChatInfo: jest.fn().mockResolvedValue({ id: 'chat-123', title: 'Test Chat' }),
-	leaveChat: jest.fn().mockResolvedValue({ success: true }),
-	validateAndFormatText: jest.fn((text, _format) => text),
-	addAdditionalFields: jest.fn((params, fields) => ({ ...params, ...fields.additionalFields })),
-	handleAttachments: jest.fn().mockResolvedValue([]),
-	processKeyboardFromParameters: jest.fn().mockReturnValue(undefined),
-	processKeyboardFromAdditionalFields: jest.fn().mockReturnValue(undefined),
-}));
+// Mock GenericFunctions module
+jest.mock('../GenericFunctions', () => {
+	const actual = jest.requireActual('../GenericFunctions');
+	return {
+		createMaxBotInstance: jest.fn().mockReturnValue({}), // Mock bot instance
+		sendMessage: jest.fn().mockResolvedValue({ message_id: '12345' }),
+		editMessage: jest.fn().mockResolvedValue({ success: true }),
+		deleteMessage: jest.fn().mockResolvedValue({ success: true }),
+		answerCallbackQuery: jest.fn().mockResolvedValue({ success: true }),
+		getChatInfo: jest.fn().mockResolvedValue({ id: 'chat-123', title: 'Test Chat' }),
+		leaveChat: jest.fn().mockResolvedValue({ success: true }),
+		validateAndFormatText: jest.fn((text, _format) => text),
+		addAdditionalFields: jest.fn((params, fields) => ({ ...params, ...fields.additionalFields })),
+		handleAttachments: jest.fn().mockResolvedValue([]),
+		processKeyboardFromParameters: jest.fn().mockReturnValue(undefined),
+		processKeyboardFromAdditionalFields: jest.fn((data) =>
+			actual.processKeyboardFromAdditionalFields(data),
+		),
+	};
+});
 
 // Import the mocked functions to spy on them
 import {
@@ -36,7 +41,10 @@ import {
  */
 const getExecuteFunctionsMock = (parameters: Record<string, any>): IExecuteFunctions =>
 	({
-		getNodeParameter: jest.fn((name: string) => parameters[name]),
+		getNodeParameter: jest.fn(
+			(name: string, _index?: number, fallback?: any) =>
+				parameters[name] !== undefined ? parameters[name] : fallback,
+		),
 		getCredentials: jest.fn().mockResolvedValue({ accessToken: 'test_token' }),
 		getInputData: jest.fn().mockReturnValue([{ json: {} }] as INodeExecutionData[]),
 		prepareOutputData: jest.fn((data) => data as INodeExecutionData[]),
@@ -800,6 +808,110 @@ describe('Max Node', () => {
 
 				await expect(maxNode.execute.call(executeFunctions)).rejects.toThrow(
 					'Use either Reply to Message ID or Forward Message ID, not both.',
+				);
+			});
+		});
+
+		describe('Inline Keyboard JSON Parameter', () => {
+			it('should pass dynamic inline keyboard JSON in sendMessage', async () => {
+				const keyboardJson = JSON.stringify({
+					buttons: [[{ text: 'Dynamic Button', type: 'callback', payload: 'dynamic_data' }]],
+				});
+				const params = {
+					resource: 'message',
+					operation: 'sendMessage',
+					sendTo: 'chat',
+					chatId: '12345',
+					text: 'Message with dynamic keyboard',
+					format: 'plain',
+					inlineKeyboardJson: keyboardJson,
+				};
+				const executeFunctions = getExecuteFunctionsMock(params);
+
+				await maxNode.execute.call(executeFunctions);
+
+				expect(sendMessage).toHaveBeenCalledWith(
+					expect.anything(),
+					'chat',
+					12345,
+					'Message with dynamic keyboard',
+					expect.objectContaining({
+						attachments: [
+							{
+								type: 'inline_keyboard',
+								payload: {
+									buttons: [[{ text: 'Dynamic Button', type: 'callback', payload: 'dynamic_data' }]],
+								},
+							},
+						],
+					}),
+				);
+			});
+
+			it('should pass dynamic inline keyboard JSON in editMessage', async () => {
+				const keyboardJson = JSON.stringify({
+					buttons: [[{ text: 'Updated Button', type: 'callback', payload: 'updated_data' }]],
+				});
+				const params = {
+					resource: 'message',
+					operation: 'editMessage',
+					messageId: 'msg-999',
+					text: 'Updated message text',
+					format: 'plain',
+					inlineKeyboardJson: keyboardJson,
+				};
+				const executeFunctions = getExecuteFunctionsMock(params);
+
+				await maxNode.execute.call(executeFunctions);
+
+				expect(editMessage).toHaveBeenCalledWith(
+					expect.anything(),
+					'msg-999',
+					'Updated message text',
+					expect.objectContaining({
+						attachments: [
+							{
+								type: 'inline_keyboard',
+								payload: {
+									buttons: [[{ text: 'Updated Button', type: 'callback', payload: 'updated_data' }]],
+								},
+							},
+						],
+					}),
+				);
+			});
+
+			it('should throw error when inlineKeyboardJson contains invalid JSON', async () => {
+				const params = {
+					resource: 'message',
+					operation: 'sendMessage',
+					sendTo: 'chat',
+					chatId: '12345',
+					text: 'Bad JSON',
+					format: 'plain',
+					inlineKeyboardJson: '{ invalid_json }',
+				};
+				const executeFunctions = getExecuteFunctionsMock(params);
+
+				await expect(maxNode.execute.call(executeFunctions)).rejects.toThrow(
+					/Inline Keyboard JSON is invalid/,
+				);
+			});
+
+			it('should throw error when inlineKeyboardJson is a primitive JSON value', async () => {
+				const params = {
+					resource: 'message',
+					operation: 'sendMessage',
+					sendTo: 'chat',
+					chatId: '12345',
+					text: 'Primitive JSON',
+					format: 'plain',
+					inlineKeyboardJson: '12345',
+				};
+				const executeFunctions = getExecuteFunctionsMock(params);
+
+				await expect(maxNode.execute.call(executeFunctions)).rejects.toThrow(
+					'Inline Keyboard JSON must be an object or array',
 				);
 			});
 		});

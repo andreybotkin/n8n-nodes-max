@@ -22,6 +22,48 @@ import {
 	processKeyboardFromAdditionalFields,
 } from './GenericFunctions';
 
+function parseInlineKeyboardJson(
+	context: IExecuteFunctions,
+	value: unknown,
+	itemIndex: number,
+): IDataObject | null {
+	if (value === undefined || value === null || value === '') {
+		return null;
+	}
+
+	let parsed: unknown = value;
+	if (typeof value === 'string') {
+		const trimmed = value.trim();
+		if (!trimmed) {
+			return null;
+		}
+
+		try {
+			parsed = JSON.parse(trimmed);
+		} catch (error) {
+			throw new NodeOperationError(
+				context.getNode(),
+				`Inline Keyboard JSON is invalid: ${(error as Error).message}`,
+				{ itemIndex },
+			);
+		}
+	}
+
+	if (!parsed || typeof parsed !== 'object') {
+		throw new NodeOperationError(
+			context.getNode(),
+			'Inline Keyboard JSON must be an object or array',
+			{ itemIndex },
+		);
+	}
+
+	if (Array.isArray(parsed)) {
+		return { buttons: parsed };
+	}
+
+	return parsed as IDataObject;
+}
+
 /**
  * Max messenger node for n8n
  *
@@ -825,6 +867,23 @@ export class Max implements INodeType {
 				],
 			},
 			{
+				displayName: 'Inline Keyboard JSON',
+				name: 'inlineKeyboardJson',
+				type: 'string',
+				typeOptions: {
+					rows: 4,
+				},
+				displayOptions: {
+					show: {
+						resource: ['message'],
+						operation: ['sendMessage', 'editMessage'],
+					},
+				},
+				default: '',
+				description:
+					'Dynamic inline keyboard JSON. Expected shape: {"buttons":[{"row":{"button":[{"text":"OK","type":"callback","payload":"..."}]}}]} or {"buttons":[[{"text":"OK","type":"callback","payload":"..."}]]}.',
+			},
+			{
 				displayName: 'Clear Attachments',
 				name: 'clearAttachments',
 				type: 'boolean',
@@ -947,6 +1006,16 @@ export class Max implements INodeType {
 						const sendTo = this.getNodeParameter('sendTo', i) as string;
 						const text = this.getNodeParameter('text', i, '') as string;
 						const format = this.getNodeParameter('format', i) as string;
+						const inlineKeyboardJson = this.getNodeParameter(
+							'inlineKeyboardJson',
+							i,
+							'',
+						);
+						const dynamicInlineKeyboard = parseInlineKeyboardJson(
+							this,
+							inlineKeyboardJson,
+							i,
+						);
 
 						// Get additional fields
 						const additionalFields = this.getNodeParameter(
@@ -1069,13 +1138,10 @@ export class Max implements INodeType {
 						}
 
 						// Handle inline keyboard if provided
-						const inlineKeyboard = (additionalFields['inlineKeyboard'] as IDataObject) || {};
-						if (
-							inlineKeyboard &&
-							inlineKeyboard['buttons'] &&
-							Array.isArray(inlineKeyboard['buttons']) &&
-							inlineKeyboard['buttons'].length > 0
-						) {
+						const inlineKeyboard =
+							dynamicInlineKeyboard ||
+							((additionalFields['inlineKeyboard'] as IDataObject) || {});
+						if (inlineKeyboard) {
 							// Process keyboard and add to attachments
 							const keyboardAttachment = processKeyboardFromAdditionalFields(inlineKeyboard);
 							if (keyboardAttachment) {
@@ -1108,6 +1174,16 @@ export class Max implements INodeType {
 						const messageId = this.getNodeParameter('messageId', i) as string;
 						const text = this.getNodeParameter('text', i) as string;
 						const format = this.getNodeParameter('format', i) as string;
+						const inlineKeyboardJson = this.getNodeParameter(
+							'inlineKeyboardJson',
+							i,
+							'',
+						);
+						const dynamicInlineKeyboard = parseInlineKeyboardJson(
+							this,
+							inlineKeyboardJson,
+							i,
+						);
 
 						// Validate message ID
 						if (!messageId || messageId.trim() === '') {
@@ -1142,7 +1218,13 @@ export class Max implements INodeType {
 						const bot = await createMaxBotInstance.call(this);
 
 						const clearAttachments = this.getNodeParameter('clearAttachments', i, false) as boolean;
-						if (clearAttachments) {
+						if (dynamicInlineKeyboard) {
+							const keyboardAttachment =
+								processKeyboardFromAdditionalFields(dynamicInlineKeyboard);
+							if (keyboardAttachment) {
+								options['attachments'] = [keyboardAttachment];
+							}
+						} else if (clearAttachments) {
 							options['attachments'] = [];
 						} else {
 							// Handle inline keyboard if provided
