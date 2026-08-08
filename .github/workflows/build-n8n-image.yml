@@ -69,13 +69,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          tags="ghcr.io/andreybotkin/n8n-with-max:${N8N_VERSION}-${GITHUB_SHA}
-          ghcr.io/andreybotkin/n8n-with-max:${N8N_VERSION}-latest"
-
-          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
-            tags="$tags
+          tags="ghcr.io/andreybotkin/n8n-with-max:${N8N_VERSION}-latest
           ghcr.io/andreybotkin/n8n-with-max:latest"
-          fi
 
           {
             echo 'value<<EOF'
