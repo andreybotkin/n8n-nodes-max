@@ -13,3 +13,24 @@ openapi_schema.yaml
 .idea
 .vscode
 bot.js
+
+# Secrets and environment
+.env
+.env.*
+!.env.example
+
+*.pem
+*.key
+*.p12
+*.pfx
+
+.npmrc
+.n8n/
+
+credentials.local.*
+secrets.*
+*.secret
+*.secrets
+
+id_rsa
+id_ed25519
